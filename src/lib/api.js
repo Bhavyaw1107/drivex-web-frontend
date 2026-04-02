@@ -59,6 +59,8 @@ export const foldersAPI = {
     api.put(`/folders/${id}`, { name }),
   deleteFolder: (id) => api.delete(`/folders/${id}`),
   deleteFolderContents: (id) => api.delete(`/folders/${id}/contents`),
+  moveFolder: (id, targetFolderId) =>
+    api.put(`/folders/${id}/move`, { parentId: targetFolderId }),
 };
 
 export const filesAPI = {
@@ -73,6 +75,8 @@ export const filesAPI = {
   deleteFile: (id) => api.delete(`/files/${id}`),
   getFile: (id) => api.get(`/files/${id}`),
   getFileUrl: (id) => api.get(`/files/${id}/url`),
+  moveFile: (id, targetFolderId) =>
+    api.put(`/files/${id}`, { folderId: targetFolderId }),
 };
 
 export default api;
