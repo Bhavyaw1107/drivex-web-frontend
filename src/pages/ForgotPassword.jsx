@@ -14,7 +14,26 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
-  
+    const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!username && !email) {
+      toast.error('Please enter your username or email');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await authAPI.forgotPassword(username || null, email || null);
+      setSent(true);
+      toast.success('If an account exists, a reset link has been sent');
+    } catch (err) {
+      toast.error('Failed to send reset link');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (sent) {
     return (
