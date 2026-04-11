@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { filesAPI, foldersAPI } from '@/lib/api';
+import { useUpload as useUploadContext } from '@/context/UploadContext';
+import { useUpload as useUploadHook } from '@/hooks/useUpload';
 import { toast } from 'sonner';
 import {
   Upload,
@@ -72,7 +74,7 @@ function formatDate(dateString) {
 
 // Get icon color class based on mime type
 function getIconColorClass(mimeType) {
-  if (!mimeType) return 'text-neon-yellow'; // folder default
+  if (!mimeType) return 'text-neon-yellow';
   if (mimeType.startsWith('image/')) return 'text-neon-pink';
   if (mimeType.startsWith('video/')) return 'text-neon-purple';
   if (mimeType.startsWith('audio/')) return 'text-neon-yellow';
@@ -145,7 +147,6 @@ export default function Dashboard() {
   const [files, setFiles] = useState([]);
   const [folders, setFolders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [currentFolderId, setCurrentFolderId] = useState(null);
   const [breadcrumbs, setBreadcrumbs] = useState([{ id: null, name: 'My Drive' }]);
@@ -169,11 +170,16 @@ export default function Dashboard() {
   const [deleteFolderContents, setDeleteFolderContents] = useState(false);
   const [fileDetails, setFileDetails] = useState(null);
   const [hoveredItem, setHoveredItem] = useState(null);
+  const [movingItems, setMovingItems] = useState(false);
 
   const fileInputRef = useRef(null);
   const sortRef = useRef(null);
   const menuRef = useRef(null);
+  const dragCounterRef = useRef(0);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+  const { uploadFiles: uploadFilesWithProgress } = useUploadHook();
+  const { uploads } = useUploadContext();
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -198,7 +204,7 @@ export default function Dashboard() {
       const res = await foldersAPI.getFolders(null);
       setAllFolders(res.data.folders || []);
     } catch (err) {
-      console.error('Failed to fetch folders');
+      toast.error('Failed to fetch folders');
     }
   }, []);
 
@@ -215,7 +221,7 @@ export default function Dashboard() {
         ...res.data.breadcrumb
       ]);
     } catch (err) {
-      console.error('Failed to fetch breadcrumb');
+      toast.error('Failed to fetch breadcrumb');
     }
   };
 
@@ -239,7 +245,7 @@ export default function Dashboard() {
   // Toggle selection
   const toggleSelect = (item, e) => {
     e?.stopPropagation();
-    const id = item._id || item.id;
+    const id = item.id;
     setSelectedItems(prev => {
       if (prev.includes(id)) {
         return prev.filter(i => i !== id);
@@ -248,11 +254,11 @@ export default function Dashboard() {
     });
   };
 
-  // Select all - filter out invalid items
+  // Select all
   const selectAll = () => {
     const allIds = sortedItems
-      .filter(item => item && getItemId(item))
-      .map(item => getItemId(item));
+      .filter(item => item && item.id)
+      .map(item => item.id);
     setSelectedItems(allIds);
   };
 
@@ -271,44 +277,63 @@ export default function Dashboard() {
     clearSelection();
   };
 
-  // Upload files
-  const uploadFiles = async (fileList) => {
-    setUploading(true);
+  // Upload files with progress tracking
+  const handleFileUpload = async (fileList) => {
+    if (!fileList || fileList.length === 0) return;
 
-    for (let i = 0; i < fileList.length; i++) {
-      const file = fileList[i];
-      const formData = new FormData();
-      formData.append('file', file);
-      if (currentFolderId) {
-        formData.append('folderId', currentFolderId);
+    try {
+      const { results, errors } = await uploadFilesWithProgress(Array.from(fileList), currentFolderId);
+      results.forEach(file => {
+        setFiles(prev => [file, ...prev]);
+      });
+      if (results.length > 0) {
+        toast.success(`${results.length} file(s) uploaded successfully`);
       }
-
-      try {
-        const res = await filesAPI.uploadFile(formData);
-        setFiles(prev => [res.data.file, ...prev]);
-        toast.success(`${file.name} uploaded`);
-      } catch (err) {
-        toast.error(`Failed to upload ${file.name}`);
-      }
+      fetchData();
+    } catch (err) {
+      toast.error('Upload failed');
     }
-
-    setUploading(false);
   };
 
   // File handlers
   const handleFileSelect = async (e) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
-    await uploadFiles(fileList);
+    await handleFileUpload(fileList);
     e.target.value = '';
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setDragActive(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setDragActive(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   const handleDrop = async (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
     setDragActive(false);
     const fileList = e.dataTransfer.files;
     if (!fileList || fileList.length === 0) return;
-    await uploadFiles(fileList);
+    await handleFileUpload(fileList);
   };
 
   const openFile = async (fileId) => {
@@ -323,7 +348,7 @@ export default function Dashboard() {
   const handleDeleteFile = async (fileId) => {
     try {
       await filesAPI.deleteFile(fileId);
-      setFiles(prev => prev.filter(f => (f.id || f._id) !== fileId));
+      setFiles(prev => prev.filter(f => f.id !== fileId));
       setDeleteConfirm(null);
       toast.success('File deleted');
     } catch (err) {
@@ -348,8 +373,8 @@ export default function Dashboard() {
   const renameFolder = async () => {
     if (!renameName.trim() || !renameDialog) return;
     try {
-      const res = await foldersAPI.renameFolder(renameDialog._id || renameDialog.id, renameName.trim());
-      setFolders(prev => prev.map(f => (f._id || f.id) === res.data._id ? res.data : f));
+      const res = await foldersAPI.renameFolder(renameDialog.id, renameName.trim());
+      setFolders(prev => prev.map(f => f.id === res.data.id ? res.data : f));
       setRenameDialog(null);
       setRenameName('');
       toast.success('Folder renamed');
@@ -361,7 +386,7 @@ export default function Dashboard() {
   const deleteFolder = async () => {
     if (!deleteFolderDialog) return;
     try {
-      const folderId = deleteFolderDialog._id || deleteFolderDialog.id;
+      const folderId = deleteFolderDialog.id;
       if (deleteFolderContents) {
         await foldersAPI.deleteFolderContents(folderId);
         toast.success('Folder and contents deleted');
@@ -369,7 +394,7 @@ export default function Dashboard() {
         await foldersAPI.deleteFolder(folderId);
         toast.success('Folder deleted');
       }
-      setFolders(prev => prev.filter(f => (f._id || f.id) !== folderId));
+      setFolders(prev => prev.filter(f => f.id !== folderId));
       setDeleteFolderDialog(null);
       setDeleteFolderContents(false);
       fetchData();
@@ -380,21 +405,24 @@ export default function Dashboard() {
 
   // Move item
   const handleMove = async (item, targetFolderId) => {
+    setMovingItems(true);
     try {
-      const itemId = item._id || item.id;
+      const itemId = item.id;
       const isFolder = isItemFolder(item);
 
       if (isFolder) {
         await foldersAPI.moveFolder(itemId, targetFolderId);
-        setFolders(prev => prev.filter(f => (f._id || f.id) !== itemId));
+        setFolders(prev => prev.filter(f => f.id !== itemId));
       } else {
         await filesAPI.moveFile(itemId, targetFolderId);
-        setFiles(prev => prev.filter(f => (f._id || f.id) !== itemId));
+        setFiles(prev => prev.filter(f => f.id !== itemId));
       }
       setMoveDialog(null);
       toast.success('Item moved successfully');
     } catch (err) {
       toast.error('Failed to move item');
+    } finally {
+      setMovingItems(false);
     }
   };
 
@@ -402,6 +430,7 @@ export default function Dashboard() {
   const handleItemDragStart = (item, e) => {
     setDragItem(item);
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', item.id);
     e.stopPropagation();
   };
 
@@ -413,37 +442,36 @@ export default function Dashboard() {
   const handleFolderDragOver = (folderId, e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (dragItem && (dragItem._id || dragItem.id) !== folderId) {
+    if (dragItem && dragItem.id !== folderId) {
       setDropTarget(folderId);
     }
   };
 
-  const handleFolderDragLeave = (e) => {
+  const handleFolderDragLeave = (folderId, e) => {
     e.stopPropagation();
-    setDropTarget(null);
+    if (dropTarget === folderId) {
+      setDropTarget(null);
+    }
   };
 
   const handleFolderDrop = async (folderId, e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (dragItem && (dragItem._id || dragItem.id) !== folderId) {
+    if (dragItem && dragItem.id !== folderId) {
       await handleMove(dragItem, folderId);
     }
     setDragItem(null);
     setDropTarget(null);
   };
 
-  // Computed values - filter out null/undefined items
+  // Computed values
   const allItems = [
-    ...folders.filter(Boolean).map(f => ({ ...f, _id: f._id || f.id, isFolder: true })),
-    ...files.filter(Boolean).map(f => ({ ...f, _id: f._id || f.id, isFolder: false }))
+    ...folders.filter(Boolean).map(f => ({ ...f, isFolder: true })),
+    ...files.filter(Boolean).map(f => ({ ...f, isFolder: false }))
   ];
 
   const filteredItems = filterItems(allItems, searchQuery);
   const sortedItems = sortItems(filteredItems, sortBy, sortOrder);
-
-  // DEBUG: Log data structure
-  console.log('[DriveX] folders:', folders, 'files:', files, 'allItems:', allItems, 'sortedItems:', sortedItems);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -451,11 +479,8 @@ export default function Dashboard() {
     window.location.href = '/login';
   };
 
-  // Safe getItemId - handles null/undefined
-  const getItemId = (item) => {
-    if (!item) return null;
-    return item._id || item.id || null;
-  };
+  // Check if there are active uploads
+  const activeUploadsCount = uploads.filter(u => u.status === 'uploading' || u.status === 'pending').length;
 
   return (
     <div className="min-h-screen bg-[#0B0F1A] text-gray-200 flex">
@@ -616,8 +641,13 @@ export default function Dashboard() {
         </header>
 
         {/* Content Area */}
-        <main className="p-6" onDragOver={(e) => { e.preventDefault(); setDragActive(true); }} onDragLeave={() => setDragActive(false)} onDrop={handleDrop}>
-
+        <main
+          className="p-6"
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
           {/* Breadcrumb */}
           <div className="flex items-center gap-2 mb-6">
             <button onClick={navigateToRoot} className="flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors">
@@ -657,7 +687,7 @@ export default function Dashboard() {
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  setMoveDialog({ items: selectedItems.map(id => allItems.find(i => (i._id || i.id) === id)).filter(Boolean) });
+                  setMoveDialog({ items: selectedItems.map(id => allItems.find(i => i.id === id)).filter(Boolean) });
                   fetchAllFolders();
                 }}
                 className="text-gray-300 hover:text-white hover:bg-white/10 gap-2"
@@ -742,24 +772,22 @@ export default function Dashboard() {
                 <Upload className="w-10 h-10 text-white" />
               </div>
               <p className="text-lg font-medium text-white">Drop files to upload</p>
-              {uploading && (
+              {activeUploadsCount > 0 && (
                 <div className="flex items-center gap-2 text-sm text-cyan-400 mt-4">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Uploading...
+                  Uploading {activeUploadsCount} file(s)...
                 </div>
               )}
             </div>
           ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {sortedItems.map((item, index) => {
-                // Guard: skip null/undefined items
                 if (!item) return null;
 
-                const itemId = getItemId(item);
-                // Fallback key if itemId is null
+                const itemId = item.id;
                 const safeKey = itemId ?? `fallback-${index}`;
                 const isSelected = itemId ? selectedItems.includes(itemId) : false;
-                const isDragging = dragItem ? getItemId(dragItem) === itemId : false;
+                const isDragging = dragItem ? dragItem.id === itemId : false;
                 const isDropTarget = itemId === dropTarget && isItemFolder(item);
                 const itemIsFolder = isItemFolder(item);
                 const isHovered = itemId === hoveredItem;
@@ -771,12 +799,12 @@ export default function Dashboard() {
                     onDragStart={(e) => handleItemDragStart(item, e)}
                     onDragEnd={handleItemDragEnd}
                     onDragOver={itemIsFolder ? (e) => handleFolderDragOver(itemId, e) : undefined}
-                    onDragLeave={itemIsFolder ? (e) => handleFolderDragLeave(e) : undefined}
+                    onDragLeave={itemIsFolder ? (e) => handleFolderDragLeave(itemId, e) : undefined}
                     onDrop={itemIsFolder ? (e) => handleFolderDrop(itemId, e) : undefined}
                     onClick={() => itemIsFolder ? navigateToFolder(itemId) : openFile(itemId)}
                     onMouseEnter={() => setHoveredItem(itemId)}
                     onMouseLeave={() => setHoveredItem(null)}
-                    className={`water-card rounded-2xl p-4 cursor-pointer group relative transition-all duration-200 ${isDragging ? 'opacity-50 scale-95' : ''} ${isDropTarget ? 'ring-2 ring-cyan-400 scale-105' : ''} ${isSelected ? 'water-card-selected' : ''}`}
+                    className={`water-card rounded-2xl p-4 cursor-pointer group relative transition-all duration-200 ${isDragging ? 'opacity-50 scale-95' : ''} ${isDropTarget ? 'ring-2 ring-cyan-400 scale-105 bg-cyan-500/10' : ''} ${isSelected ? 'water-card-selected' : ''}`}
                   >
                     {/* Selection Checkbox - Only on hover */}
                     {isHovered && (
@@ -911,15 +939,14 @@ export default function Dashboard() {
 
               {/* List Items */}
               {sortedItems.map((item, index) => {
-                // Guard: skip null/undefined items
                 if (!item) return null;
 
-                const itemId = getItemId(item);
-                // Fallback key if itemId is null
+                const itemId = item.id;
                 const safeKey = itemId ?? `fallback-list-${index}`;
                 const isSelected = itemId ? selectedItems.includes(itemId) : false;
                 const itemIsFolder = isItemFolder(item);
                 const isHovered = itemId === hoveredItem;
+                const isDropTarget = itemId === dropTarget && itemIsFolder;
 
                 return (
                   <div
@@ -928,12 +955,12 @@ export default function Dashboard() {
                     onDragStart={(e) => handleItemDragStart(item, e)}
                     onDragEnd={handleItemDragEnd}
                     onDragOver={itemIsFolder ? (e) => handleFolderDragOver(itemId, e) : undefined}
-                    onDragLeave={itemIsFolder ? (e) => handleFolderDragLeave(e) : undefined}
+                    onDragLeave={itemIsFolder ? (e) => handleFolderDragLeave(itemId, e) : undefined}
                     onDrop={itemIsFolder ? (e) => handleFolderDrop(itemId, e) : undefined}
                     onClick={() => itemIsFolder ? navigateToFolder(itemId) : openFile(itemId)}
                     onMouseEnter={() => setHoveredItem(itemId)}
                     onMouseLeave={() => setHoveredItem(null)}
-                    className={`grid grid-cols-12 gap-4 px-6 py-3 items-center border-b border-white/5 cursor-pointer group transition-all ${isSelected ? 'water-item-selected' : 'hover:bg-white/5'} ${dropTarget === itemId && itemIsFolder ? 'ring-2 ring-cyan-400/50' : ''}`}
+                    className={`grid grid-cols-12 gap-4 px-6 py-3 items-center border-b border-white/5 cursor-pointer group transition-all ${isSelected ? 'water-item-selected' : 'hover:bg-white/5'} ${isDropTarget ? 'ring-2 ring-cyan-400/50 bg-cyan-500/10' : ''}`}
                   >
                     <div className="col-span-1">
                       {isHovered && (
@@ -995,6 +1022,39 @@ export default function Dashboard() {
         </main>
       </div>
 
+      {/* Move Dialog */}
+      {moveDialog && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="water-dialog rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-semibold mb-4">Move to...</h2>
+            <div className="max-h-64 overflow-y-auto space-y-1">
+              <button
+                onClick={() => moveDialog.items.forEach(item => handleMove(item, null))}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-left transition-colors"
+                disabled={movingItems}
+              >
+                <Home className="w-5 h-5 text-gray-400" />
+                <span className="text-sm">My Drive (Root)</span>
+              </button>
+              {allFolders.map(folder => (
+                <button
+                  key={folder.id}
+                  onClick={() => moveDialog.items.forEach(item => handleMove(item, folder.id))}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-left transition-colors"
+                  disabled={movingItems}
+                >
+                  <Folder className="w-5 h-5 text-neon-yellow" />
+                  <span className="text-sm">{folder.name}</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3 mt-6 justify-end">
+              <Button variant="outline" onClick={() => setMoveDialog(null)} className="water-button" disabled={movingItems}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* New Folder Dialog */}
       {newFolderDialog && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4">
@@ -1034,37 +1094,6 @@ export default function Dashboard() {
             <div className="flex gap-3 mt-6 justify-end">
               <Button variant="outline" onClick={() => setRenameDialog(null)} className="water-button">Cancel</Button>
               <Button onClick={renameFolder} disabled={!renameName.trim()} className="bg-brand-gradient-full hover:opacity-90 text-white border-0">Rename</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Move Dialog */}
-      {moveDialog && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="water-dialog rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold mb-4">Move to...</h2>
-            <div className="max-h-64 overflow-y-auto space-y-1">
-              <button
-                onClick={() => moveDialog.items.forEach(item => handleMove(item, null))}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-left transition-colors"
-              >
-                <Home className="w-5 h-5 text-gray-400" />
-                <span className="text-sm">My Drive (Root)</span>
-              </button>
-              {allFolders.map(folder => (
-                <button
-                  key={folder._id || folder.id}
-                  onClick={() => moveDialog.items.forEach(item => handleMove(item, folder._id || folder.id))}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-left transition-colors"
-                >
-                  <Folder className="w-5 h-5 text-neon-yellow" />
-                  <span className="text-sm">{folder.name}</span>
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-3 mt-6 justify-end">
-              <Button variant="outline" onClick={() => setMoveDialog(null)} className="water-button">Cancel</Button>
             </div>
           </div>
         </div>
@@ -1113,20 +1142,20 @@ export default function Dashboard() {
                 onClick={() => {
                   if (deleteConfirm.bulk) {
                     deleteConfirm.ids.forEach(id => {
-                      const item = allItems.find(i => (i._id || i.id) === id);
+                      const item = allItems.find(i => i.id === id);
                       if (item) {
                         if (isItemFolder(item)) {
                           foldersAPI.deleteFolder(id);
-                          setFolders(prev => prev.filter(f => (f._id || f.id) !== id));
+                          setFolders(prev => prev.filter(f => f.id !== id));
                         } else {
                           filesAPI.deleteFile(id);
-                          setFiles(prev => prev.filter(f => (f._id || f.id) !== id));
+                          setFiles(prev => prev.filter(f => f.id !== id));
                         }
                       }
                     });
                     setSelectedItems([]);
                   } else {
-                    handleDeleteFile(deleteConfirm._id || deleteConfirm.id);
+                    handleDeleteFile(deleteConfirm.id);
                   }
                   setDeleteConfirm(null);
                 }}
@@ -1179,7 +1208,7 @@ export default function Dashboard() {
 
             <div className="flex gap-3 mt-6">
               {!isItemFolder(fileDetails) && (
-                <Button onClick={() => openFile(fileDetails._id || fileDetails.id)} className="flex-1 bg-brand-gradient-full hover:opacity-90 text-white border-0 gap-2">
+                <Button onClick={() => openFile(fileDetails.id)} className="flex-1 bg-brand-gradient-full hover:opacity-90 text-white border-0 gap-2">
                   <ExternalLink className="w-4 h-4" />
                   Open
                 </Button>

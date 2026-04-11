@@ -2,7 +2,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL  || '/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -68,15 +68,16 @@ export const filesAPI = {
     const params = folderId ? `?folderId=${folderId}` : '';
     return api.get(`/files${params}`);
   },
-  uploadFile: (formData) =>
+  uploadFile: (formData, onUploadProgress) =>
     api.post('/files/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress,
     }),
   deleteFile: (id) => api.delete(`/files/${id}`),
   getFile: (id) => api.get(`/files/${id}`),
   getFileUrl: (id) => api.get(`/files/${id}/url`),
   moveFile: (id, targetFolderId) =>
-    api.put(`/files/${id}`, { folderId: targetFolderId }),
+    api.put(`/files/${id}/move`, { folderId: targetFolderId }),
 };
 
 export default api;

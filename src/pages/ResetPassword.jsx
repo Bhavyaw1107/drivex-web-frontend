@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { authAPI } from '@/lib/api';
 import { toast } from 'sonner';
-import { Loader2, Lock, CheckCircle } from 'lucide-react';
+import { Loader2, Lock, CheckCircle, Cloud, Sparkles } from 'lucide-react';
 
 export default function ResetPassword() {
   const { token } = useParams();
@@ -47,39 +46,49 @@ export default function ResetPassword() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="h-8 w-8 text-green-600" />
-              </div>
-              <h2 className="text-2xl font-bold mb-2">Password Reset!</h2>
-              <p className="text-gray-600 mb-4">Your password has been reset successfully.</p>
-              <p className="text-sm text-gray-500">Redirecting to login...</p>
+      <div className="min-h-screen bg-[#0B0F1A] flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-neon-purple/10 rounded-full blur-3xl" />
+        </div>
+
+        <div className="w-full max-w-md relative z-10">
+          <div className="water-card rounded-2xl p-8 text-center">
+            <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="h-8 w-8 text-green-400" />
             </div>
-          </CardContent>
-        </Card>
+            <h2 className="text-2xl font-bold text-white mb-2">Password Reset!</h2>
+            <p className="text-gray-400 mb-4">Your password has been reset successfully.</p>
+            <p className="text-sm text-gray-500">Redirecting to login...</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
-            <Lock className="h-6 w-6 text-primary" />
+    <div className="min-h-screen bg-[#0B0F1A] flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-neon-purple/10 rounded-full blur-3xl" />
+      </div>
+
+      <div className="w-full max-w-md relative z-10">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-brand-gradient-full mb-4 water-glow">
+            <Cloud className="h-8 w-8 text-white" />
           </div>
-          <CardTitle className="text-2xl font-bold text-center">Reset Password</CardTitle>
-          <CardDescription className="text-center">
-            Enter your new password
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          <h1 className="text-3xl font-bold gradient-text-full">DriveX</h1>
+        </div>
+
+        <div className="water-card rounded-2xl p-6">
+          <h2 className="text-xl font-semibold mb-1 text-white">Reset Password</h2>
+          <p className="text-gray-500 text-sm mb-6">Enter your new password</p>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="password">New Password</Label>
+              <Label htmlFor="password" className="text-sm font-medium text-gray-300">New Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -88,10 +97,11 @@ export default function ResetPassword() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
+                className="water-input h-11"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-300">Confirm Password</Label>
               <Input
                 id="confirmPassword"
                 type="password"
@@ -100,15 +110,16 @@ export default function ResetPassword() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 minLength={6}
+                className="water-input h-11"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full h-11 bg-brand-gradient-full hover:opacity-90 text-white border-0" disabled={loading}>
               {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {loading ? 'Resetting...' : 'Reset Password'}
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
