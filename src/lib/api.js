@@ -1,52 +1,68 @@
 import axios from 'axios';
 import { toast } from 'sonner';
 
+let clerkToken = null;
+let clerkTokenGetter = null;
+
+export const setClerkToken = (token) => {
+  clerkToken = token;
+};
+
+export const setClerkTokenGetter = (getter) => {
+  clerkTokenGetter = getter;
+};
+
+const resolveApiBaseUrl = () => {
+  const configuredUrl = import.meta.env.VITE_API_URL?.trim();
+
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/+$/, '');
+  }
+
+  return '/api';
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
+  baseURL: resolveApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+api.interceptors.request.use(async (config) => {
+  let token = clerkToken;
+
+  if (clerkTokenGetter) {
+    try {
+      token = await clerkTokenGetter();
+      clerkToken = token ?? null;
+    } catch (error) {
+      clerkToken = null;
+      token = null;
+    }
+  }
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  } else if (config.headers?.Authorization) {
+    delete config.headers.Authorization;
   }
+
   return config;
 });
 
-// Handle auth errors and network errors globally
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      // Only redirect if not already on login page
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
-      }
+      toast.error('Your session expired. Please sign in again.');
     } else if (!error.response) {
-      // Network error
       toast.error('Network error. Please check your connection.');
     }
+
     return Promise.reject(error);
   }
 );
-
-export const authAPI = {
-  register: (username, password, email) =>
-    api.post('/auth/register', { username, password, email }),
-  login: (username, password) =>
-    api.post('/auth/login', { username, password }),
-  getMe: () => api.get('/auth/me'),
-  forgotPassword: (username, email) =>
-    api.post('/auth/forgot-password', { username, email }),
-  resetPassword: (token, password) =>
-    api.post(`/auth/reset-password/${token}`, { password }),
-};
 
 export const foldersAPI = {
   createFolder: (name, parentId) =>
@@ -61,6 +77,13 @@ export const foldersAPI = {
   deleteFolderContents: (id) => api.delete(`/folders/${id}/contents`),
   moveFolder: (id, targetFolderId) =>
     api.put(`/folders/${id}/move`, { parentId: targetFolderId }),
+  toggleStarFolder: (id) => api.patch(`/folders/${id}/star`),
+  getStarredFolders: () => api.get('/folders/starred'),
+  getRecentFolders: () => api.get('/folders/recent'),
+  getTrashFolders: (parentId) =>
+    api.get(parentId ? `/folders/trash?parentId=${parentId}` : '/folders/trash'),
+  restoreFolder: (id) => api.patch(`/folders/${id}/restore`),
+  emptyTrashFolders: () => api.delete('/folders/trash/empty'),
 };
 
 export const filesAPI = {
@@ -78,6 +101,13 @@ export const filesAPI = {
   getFileUrl: (id) => api.get(`/files/${id}/url`),
   moveFile: (id, targetFolderId) =>
     api.put(`/files/${id}/move`, { folderId: targetFolderId }),
+  toggleStarFile: (id) => api.patch(`/files/${id}/star`),
+  getStarredFiles: () => api.get('/files/starred'),
+  getRecentFiles: () => api.get('/files/recent'),
+  getTrashFiles: (folderId) =>
+    api.get(folderId ? `/files/trash?folderId=${folderId}` : '/files/trash'),
+  restoreFile: (id) => api.patch(`/files/${id}/restore`),
+  emptyTrashFiles: () => api.delete('/files/trash/empty'),
 };
 
 export default api;
