@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { filesAPI, foldersAPI } from '@/lib/api';
-import { useUpload as useUploadContext } from '@/context/UploadContext';
-import { useUpload as useUploadHook } from '@/hooks/useUpload';
-import { toast } from 'sonner';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useUser, SignOutButton } from "@clerk/clerk-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { filesAPI, foldersAPI } from "@/lib/api";
+import { useUpload as useUploadContext } from "@/context/UploadContext";
+import { useUpload as useUploadHook } from "@/hooks/useUpload";
+import { toast } from "sonner";
 import {
   Upload,
   File,
@@ -39,16 +40,17 @@ import {
   ExternalLink,
   Star,
   CheckSquare,
-  Sparkles
-} from 'lucide-react';
+  Sparkles,
+  RotateCcw,
+} from "lucide-react";
 
 // Format file size
 function formatFileSize(bytes) {
-  if (bytes === 0) return '0 B';
+  if (bytes === 0) return "0 B";
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }
 
 // Format date
@@ -60,40 +62,53 @@ function formatDate(dateString) {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'Just now';
+  if (diffMins < 1) return "Just now";
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
   if (diffDays < 7) return `${diffDays}d ago`;
 
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
   });
 }
 
 // Get icon color class based on mime type
 function getIconColorClass(mimeType) {
-  if (!mimeType) return 'text-neon-yellow';
-  if (mimeType.startsWith('image/')) return 'text-neon-pink';
-  if (mimeType.startsWith('video/')) return 'text-neon-purple';
-  if (mimeType.startsWith('audio/')) return 'text-neon-yellow';
-  if (mimeType.includes('pdf') || mimeType.includes('word') || mimeType.includes('document') || mimeType.includes('docx'))
-    return 'text-cyan-400';
-  if (mimeType.includes('zip') || mimeType.includes('archive') || mimeType.includes('rar'))
-    return 'text-neon-yellow';
-  return 'text-cyan-400';
+  if (!mimeType) return "text-neon-yellow";
+  if (mimeType.startsWith("image/")) return "text-neon-pink";
+  if (mimeType.startsWith("video/")) return "text-neon-purple";
+  if (mimeType.startsWith("audio/")) return "text-neon-yellow";
+  if (
+    mimeType.includes("pdf") ||
+    mimeType.includes("word") ||
+    mimeType.includes("document") ||
+    mimeType.includes("docx")
+  )
+    return "text-cyan-400";
+  if (
+    mimeType.includes("zip") ||
+    mimeType.includes("archive") ||
+    mimeType.includes("rar")
+  )
+    return "text-neon-yellow";
+  return "text-cyan-400";
 }
 
 // Get icon gradient class
 function getIconGradientClass(mimeType) {
-  if (!mimeType) return 'icon-gradient-folder';
-  if (mimeType.startsWith('image/')) return 'icon-gradient-image';
-  if (mimeType.startsWith('video/')) return 'icon-gradient-video';
-  if (mimeType.startsWith('audio/')) return 'icon-gradient-audio';
-  if (mimeType.includes('zip') || mimeType.includes('archive') || mimeType.includes('rar'))
-    return 'icon-gradient-archive';
-  return 'icon-gradient-file';
+  if (!mimeType) return "icon-gradient-folder";
+  if (mimeType.startsWith("image/")) return "icon-gradient-image";
+  if (mimeType.startsWith("video/")) return "icon-gradient-video";
+  if (mimeType.startsWith("audio/")) return "icon-gradient-audio";
+  if (
+    mimeType.includes("zip") ||
+    mimeType.includes("archive") ||
+    mimeType.includes("rar")
+  )
+    return "icon-gradient-archive";
+  return "icon-gradient-file";
 }
 
 // Check if item is a folder
@@ -103,32 +118,32 @@ function isItemFolder(item) {
 
 // Sort options
 const SORT_OPTIONS = [
-  { key: 'name', label: 'Name', icon: SortAsc },
-  { key: 'date', label: 'Date modified', icon: Clock },
-  { key: 'size', label: 'Size', icon: ArrowUpDown },
-  { key: 'type', label: 'Type', icon: FileType },
+  { key: "name", label: "Name", icon: SortAsc },
+  { key: "date", label: "Date modified", icon: Clock },
+  { key: "size", label: "Size", icon: ArrowUpDown },
+  { key: "type", label: "Type", icon: FileType },
 ];
 
 // Sort items
 function sortItems(items, sortBy, sortOrder) {
   return [...items].sort((a, b) => {
     let comparison = 0;
-    const aName = (a.name || a.filename || '').toLowerCase();
-    const bName = (b.name || b.filename || '').toLowerCase();
+    const aName = (a.name || a.filename || "").toLowerCase();
+    const bName = (b.name || b.filename || "").toLowerCase();
 
-    if (sortBy === 'name') {
+    if (sortBy === "name") {
       comparison = aName.localeCompare(bName);
-    } else if (sortBy === 'date') {
+    } else if (sortBy === "date") {
       comparison = new Date(b.createdAt) - new Date(a.createdAt);
-    } else if (sortBy === 'size') {
+    } else if (sortBy === "size") {
       comparison = (b.size || 0) - (a.size || 0);
-    } else if (sortBy === 'type') {
-      const aType = a.mimeType || 'folder';
-      const bType = b.mimeType || 'folder';
+    } else if (sortBy === "type") {
+      const aType = a.mimeType || "folder";
+      const bType = b.mimeType || "folder";
       comparison = aType.localeCompare(bType);
     }
 
-    return sortOrder === 'asc' ? comparison : -comparison;
+    return sortOrder === "asc" ? comparison : -comparison;
   });
 }
 
@@ -136,8 +151,8 @@ function sortItems(items, sortBy, sortOrder) {
 function filterItems(items, searchQuery) {
   if (!searchQuery.trim()) return items;
   const query = searchQuery.toLowerCase();
-  return items.filter(item => {
-    const name = (item.name || item.filename || '').toLowerCase();
+  return items.filter((item) => {
+    const name = (item.name || item.filename || "").toLowerCase();
     return name.includes(query);
   });
 }
@@ -149,54 +164,89 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [dragActive, setDragActive] = useState(false);
   const [currentFolderId, setCurrentFolderId] = useState(null);
-  const [breadcrumbs, setBreadcrumbs] = useState([{ id: null, name: 'My Drive' }]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('name');
-  const [sortOrder, setSortOrder] = useState('asc');
-  const [viewMode, setViewMode] = useState('grid');
+  const [breadcrumbs, setBreadcrumbs] = useState([
+    { id: null, name: "My Drive" },
+  ]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("name");
+  const [sortOrder, setSortOrder] = useState("asc");
+  const [viewMode, setViewMode] = useState("grid");
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState(null);
   const [selectedItems, setSelectedItems] = useState([]);
   const [dragItem, setDragItem] = useState(null);
+  const [dragItems, setDragItems] = useState([]);
   const [dropTarget, setDropTarget] = useState(null);
   const [moveDialog, setMoveDialog] = useState(null);
   const [allFolders, setAllFolders] = useState([]);
   const [newFolderDialog, setNewFolderDialog] = useState(false);
-  const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderName, setNewFolderName] = useState("");
   const [renameDialog, setRenameDialog] = useState(null);
-  const [renameName, setRenameName] = useState('');
+  const [renameName, setRenameName] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleteFolderDialog, setDeleteFolderDialog] = useState(null);
   const [deleteFolderContents, setDeleteFolderContents] = useState(false);
   const [fileDetails, setFileDetails] = useState(null);
   const [hoveredItem, setHoveredItem] = useState(null);
   const [movingItems, setMovingItems] = useState(false);
+  // View state: 'drive' | 'starred' | 'recent' | 'trash'
+  const [currentView, setCurrentView] = useState('drive');
 
   const fileInputRef = useRef(null);
   const sortRef = useRef(null);
   const menuRef = useRef(null);
   const dragCounterRef = useRef(0);
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const { user } = useUser();
 
   const { uploadFiles: uploadFilesWithProgress } = useUploadHook();
   const { uploads } = useUploadContext();
 
-  // Fetch data
+  const isExternalFileDrag = (event) => {
+    const types = Array.from(event.dataTransfer?.types || []);
+    return types.includes("Files");
+  };
+
+  // Fetch data based on current view
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setFiles([]);
+    setFolders([]);
     try {
-      const [foldersRes, filesRes] = await Promise.all([
-        foldersAPI.getFolders(currentFolderId),
-        filesAPI.getFiles(currentFolderId)
-      ]);
-      setFolders(foldersRes.data.folders || []);
-      setFiles(filesRes.data.files || []);
+      if (currentView === 'starred') {
+        const [foldersRes, filesRes] = await Promise.all([
+          foldersAPI.getStarredFolders(),
+          filesAPI.getStarredFiles(),
+        ]);
+        setFolders(foldersRes.data.folders || []);
+        setFiles(filesRes.data.files || []);
+      } else if (currentView === 'recent') {
+        const [foldersRes, filesRes] = await Promise.all([
+          foldersAPI.getRecentFolders(),
+          filesAPI.getRecentFiles(),
+        ]);
+        setFolders(foldersRes.data.folders || []);
+        setFiles(filesRes.data.files || []);
+      } else if (currentView === 'trash') {
+        const [foldersRes, filesRes] = await Promise.all([
+          foldersAPI.getTrashFolders(currentFolderId),
+          filesAPI.getTrashFiles(currentFolderId),
+        ]);
+        setFolders(foldersRes.data.folders || []);
+        setFiles(filesRes.data.files || []);
+      } else {
+        const [foldersRes, filesRes] = await Promise.all([
+          foldersAPI.getFolders(currentFolderId),
+          filesAPI.getFiles(currentFolderId),
+        ]);
+        setFolders(foldersRes.data.folders || []);
+        setFiles(filesRes.data.files || []);
+      }
     } catch (err) {
-      toast.error('Failed to load files');
+      toast.error("Failed to load files");
     } finally {
       setLoading(false);
     }
-  }, [currentFolderId]);
+  }, [currentFolderId, currentView]);
 
   // Fetch all folders for move dialog
   const fetchAllFolders = useCallback(async () => {
@@ -204,24 +254,23 @@ export default function Dashboard() {
       const res = await foldersAPI.getFolders(null);
       setAllFolders(res.data.folders || []);
     } catch (err) {
-      toast.error('Failed to fetch folders');
+      toast.error("Failed to fetch folders");
     }
   }, []);
 
   // Fetch breadcrumb
   const fetchBreadcrumb = async (folderId) => {
+    const rootLabel = currentView === "trash" ? "Trash" : "My Drive";
+
     if (!folderId) {
-      setBreadcrumbs([{ id: null, name: 'My Drive' }]);
+      setBreadcrumbs([{ id: null, name: rootLabel }]);
       return;
     }
     try {
       const res = await foldersAPI.getBreadcrumb(folderId);
-      setBreadcrumbs([
-        { id: null, name: 'My Drive' },
-        ...res.data.breadcrumb
-      ]);
+      setBreadcrumbs([{ id: null, name: rootLabel }, ...res.data.breadcrumb]);
     } catch (err) {
-      toast.error('Failed to fetch breadcrumb');
+      toast.error("Failed to fetch breadcrumb");
     }
   };
 
@@ -229,26 +278,35 @@ export default function Dashboard() {
     fetchData();
   }, [fetchData]);
 
+  // Handle view change
+  const handleViewChange = (view) => {
+    setCurrentView(view);
+    setCurrentFolderId(null);
+    setBreadcrumbs([{ id: null, name: view === "trash" ? "Trash" : "My Drive" }]);
+    setSearchQuery("");
+    clearSelection();
+  };
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (sortRef.current && !sortRef.current.contains(e.target)) {
         setSortDropdownOpen(false);
       }
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
+      if (!e.target.closest(".item-menu") && !e.target.closest(".menu-toggle")) {
         setActiveMenu(null);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   // Toggle selection
   const toggleSelect = (item, e) => {
     e?.stopPropagation();
     const id = item.id;
-    setSelectedItems(prev => {
+    setSelectedItems((prev) => {
       if (prev.includes(id)) {
-        return prev.filter(i => i !== id);
+        return prev.filter((i) => i !== id);
       }
       return [...prev, id];
     });
@@ -257,8 +315,8 @@ export default function Dashboard() {
   // Select all
   const selectAll = () => {
     const allIds = sortedItems
-      .filter(item => item && item.id)
-      .map(item => item.id);
+      .filter((item) => item && item.id)
+      .map((item) => item.id);
     setSelectedItems(allIds);
   };
 
@@ -273,7 +331,7 @@ export default function Dashboard() {
 
   const navigateToRoot = () => {
     setCurrentFolderId(null);
-    setBreadcrumbs([{ id: null, name: 'My Drive' }]);
+    setBreadcrumbs([{ id: null, name: currentView === "trash" ? "Trash" : "My Drive" }]);
     clearSelection();
   };
 
@@ -282,16 +340,19 @@ export default function Dashboard() {
     if (!fileList || fileList.length === 0) return;
 
     try {
-      const { results, errors } = await uploadFilesWithProgress(Array.from(fileList), currentFolderId);
-      results.forEach(file => {
-        setFiles(prev => [file, ...prev]);
+      const { results, errors } = await uploadFilesWithProgress(
+        Array.from(fileList),
+        currentFolderId
+      );
+      results.forEach((file) => {
+        setFiles((prev) => [file, ...prev]);
       });
       if (results.length > 0) {
         toast.success(`${results.length} file(s) uploaded successfully`);
       }
       fetchData();
     } catch (err) {
-      toast.error('Upload failed');
+      toast.error("Upload failed");
     }
   };
 
@@ -300,10 +361,12 @@ export default function Dashboard() {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
     await handleFileUpload(fileList);
-    e.target.value = '';
+    e.target.value = "";
   };
 
   const handleDragEnter = (e) => {
+    if (!isExternalFileDrag(e)) return;
+
     e.preventDefault();
     e.stopPropagation();
     dragCounterRef.current++;
@@ -313,6 +376,8 @@ export default function Dashboard() {
   };
 
   const handleDragLeave = (e) => {
+    if (!isExternalFileDrag(e)) return;
+
     e.preventDefault();
     e.stopPropagation();
     dragCounterRef.current--;
@@ -322,11 +387,16 @@ export default function Dashboard() {
   };
 
   const handleDragOver = (e) => {
+    if (!isExternalFileDrag(e)) return;
+
     e.preventDefault();
     e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
   };
 
   const handleDrop = async (e) => {
+    if (!isExternalFileDrag(e)) return;
+
     e.preventDefault();
     e.stopPropagation();
     dragCounterRef.current = 0;
@@ -339,20 +409,81 @@ export default function Dashboard() {
   const openFile = async (fileId) => {
     try {
       const res = await filesAPI.getFileUrl(fileId);
-      window.open(res.data.presignedUrl, '_blank');
+      window.open(res.data.presignedUrl, "_blank");
     } catch (err) {
-      toast.error('Failed to open file');
+      toast.error("Failed to open file");
     }
   };
 
   const handleDeleteFile = async (fileId) => {
     try {
       await filesAPI.deleteFile(fileId);
-      setFiles(prev => prev.filter(f => f.id !== fileId));
+      setFiles((prev) => prev.filter((f) => f.id !== fileId));
       setDeleteConfirm(null);
-      toast.success('File deleted');
+      toast.success(currentView === 'trash' ? "File permanently deleted" : "File moved to trash");
     } catch (err) {
-      toast.error('Failed to delete file');
+      toast.error("Failed to delete file");
+    }
+  };
+
+  // Toggle star for file
+  const toggleStarFile = async (fileId) => {
+    try {
+      const res = await filesAPI.toggleStarFile(fileId);
+      setFiles((prev) =>
+        prev.map((f) => (f.id === fileId ? { ...f, isStarred: res.data.isStarred } : f))
+      );
+      toast.success(res.data.isStarred ? "File starred" : "File unstarred");
+    } catch (err) {
+      toast.error("Failed to update star status");
+    }
+  };
+
+  // Toggle star for folder
+  const toggleStarFolder = async (folderId) => {
+    try {
+      const res = await foldersAPI.toggleStarFolder(folderId);
+      setFolders((prev) =>
+        prev.map((f) => (f.id === folderId ? { ...f, isStarred: res.data.isStarred } : f))
+      );
+      toast.success(res.data.isStarred ? "Folder starred" : "Folder unstarred");
+    } catch (err) {
+      toast.error("Failed to update star status");
+    }
+  };
+
+  // Restore file from trash
+  const restoreFile = async (fileId) => {
+    try {
+      await filesAPI.restoreFile(fileId);
+      setFiles((prev) => prev.filter((f) => f.id !== fileId));
+      toast.success("File restored");
+    } catch (err) {
+      toast.error("Failed to restore file");
+    }
+  };
+
+  // Restore folder from trash
+  const restoreFolder = async (folderId) => {
+    try {
+      await foldersAPI.restoreFolder(folderId);
+      setFolders((prev) => prev.filter((f) => f.id !== folderId));
+      toast.success("Folder restored");
+    } catch (err) {
+      toast.error("Failed to restore folder");
+    }
+  };
+
+  // Empty trash
+  const emptyTrash = async () => {
+    try {
+      await filesAPI.emptyTrashFiles();
+      await foldersAPI.emptyTrashFolders();
+      setFiles([]);
+      setFolders([]);
+      toast.success("Trash emptied");
+    } catch (err) {
+      toast.error("Failed to empty trash");
     }
   };
 
@@ -360,26 +491,36 @@ export default function Dashboard() {
   const createFolder = async () => {
     if (!newFolderName.trim()) return;
     try {
-      const res = await foldersAPI.createFolder(newFolderName.trim(), currentFolderId);
-      setFolders(prev => [...prev, res.data]);
+      const res = await foldersAPI.createFolder(
+        newFolderName.trim(),
+        currentFolderId
+      );
+      setFolders((prev) => [...prev, res.data]);
       setNewFolderDialog(false);
-      setNewFolderName('');
-      toast.success('Folder created');
+      setNewFolderName("");
+      setActiveMenu(null);
+      toast.success("Folder created");
+      fetchData();
     } catch (err) {
-      toast.error('Failed to create folder');
+      toast.error(err.response?.data?.error || "Failed to create folder");
     }
   };
 
   const renameFolder = async () => {
     if (!renameName.trim() || !renameDialog) return;
     try {
-      const res = await foldersAPI.renameFolder(renameDialog.id, renameName.trim());
-      setFolders(prev => prev.map(f => f.id === res.data.id ? res.data : f));
+      const res = await foldersAPI.renameFolder(
+        renameDialog.id,
+        renameName.trim()
+      );
+      setFolders((prev) =>
+        prev.map((f) => (f.id === res.data.id ? res.data : f))
+      );
       setRenameDialog(null);
-      setRenameName('');
-      toast.success('Folder renamed');
+      setRenameName("");
+      toast.success("Folder renamed");
     } catch (err) {
-      toast.error('Failed to rename folder');
+      toast.error("Failed to rename folder");
     }
   };
 
@@ -389,38 +530,50 @@ export default function Dashboard() {
       const folderId = deleteFolderDialog.id;
       if (deleteFolderContents) {
         await foldersAPI.deleteFolderContents(folderId);
-        toast.success('Folder and contents deleted');
+        toast.success("Folder and contents deleted");
       } else {
         await foldersAPI.deleteFolder(folderId);
-        toast.success('Folder deleted');
+        toast.success("Folder deleted");
       }
-      setFolders(prev => prev.filter(f => f.id !== folderId));
+      setFolders((prev) => prev.filter((f) => f.id !== folderId));
       setDeleteFolderDialog(null);
       setDeleteFolderContents(false);
       fetchData();
     } catch (err) {
-      toast.error('Failed to delete folder');
+      toast.error("Failed to delete folder");
     }
   };
 
   // Move item
-  const handleMove = async (item, targetFolderId) => {
+  const handleMove = async (items, targetFolderId) => {
     setMovingItems(true);
     try {
-      const itemId = item.id;
-      const isFolder = isItemFolder(item);
+      const normalizedItems = Array.isArray(items) ? items : [items];
+      const movableItems = normalizedItems.filter(
+        (item) => item && item.id && item.id !== targetFolderId
+      );
 
-      if (isFolder) {
-        await foldersAPI.moveFolder(itemId, targetFolderId);
-        setFolders(prev => prev.filter(f => f.id !== itemId));
-      } else {
-        await filesAPI.moveFile(itemId, targetFolderId);
-        setFiles(prev => prev.filter(f => f.id !== itemId));
-      }
+      await Promise.all(
+        movableItems.map((item) => {
+          if (isItemFolder(item)) {
+            return foldersAPI.moveFolder(item.id, targetFolderId);
+          }
+
+          return filesAPI.moveFile(item.id, targetFolderId);
+        })
+      );
+
+      const movedIds = new Set(movableItems.map((item) => item.id));
+      setFolders((prev) => prev.filter((folder) => !movedIds.has(folder.id)));
+      setFiles((prev) => prev.filter((file) => !movedIds.has(file.id)));
       setMoveDialog(null);
-      toast.success('Item moved successfully');
+      clearSelection();
+      toast.success(
+        movableItems.length > 1 ? "Items moved successfully" : "Item moved successfully"
+      );
+      fetchData();
     } catch (err) {
-      toast.error('Failed to move item');
+      toast.error("Failed to move item");
     } finally {
       setMovingItems(false);
     }
@@ -428,21 +581,37 @@ export default function Dashboard() {
 
   // Drag and drop between folders
   const handleItemDragStart = (item, e) => {
+    const selectedDraggedItems =
+      selectedItems.includes(item.id)
+        ? selectedItems
+            .map((id) => allItems.find((candidate) => candidate.id === id))
+            .filter(Boolean)
+        : [item];
+
     setDragItem(item);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', item.id);
+    setDragItems(selectedDraggedItems);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", item.id);
+    setDragActive(false);
     e.stopPropagation();
   };
 
   const handleItemDragEnd = () => {
     setDragItem(null);
+    setDragItems([]);
     setDropTarget(null);
   };
 
   const handleFolderDragOver = (folderId, e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (dragItem && dragItem.id !== folderId) {
+    const draggedIds = new Set(
+      (dragItems.length ? dragItems : [dragItem])
+        .filter(Boolean)
+        .map((item) => item.id)
+    );
+
+    if (draggedIds.size > 0 && !draggedIds.has(folderId)) {
       setDropTarget(folderId);
     }
   };
@@ -457,30 +626,98 @@ export default function Dashboard() {
   const handleFolderDrop = async (folderId, e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (dragItem && dragItem.id !== folderId) {
-      await handleMove(dragItem, folderId);
+    const itemsToMove = dragItems.length ? dragItems : dragItem ? [dragItem] : [];
+    const hasInvalidTarget = itemsToMove.some((item) => item.id === folderId);
+
+    if (itemsToMove.length > 0 && !hasInvalidTarget) {
+      await handleMove(itemsToMove, folderId);
     }
     setDragItem(null);
+    setDragItems([]);
     setDropTarget(null);
   };
 
   // Computed values
   const allItems = [
-    ...folders.filter(Boolean).map(f => ({ ...f, isFolder: true })),
-    ...files.filter(Boolean).map(f => ({ ...f, isFolder: false }))
+    ...folders.filter(Boolean).map((f) => ({ ...f, isFolder: true })),
+    ...files.filter(Boolean).map((f) => ({ ...f, isFolder: false })),
   ];
 
   const filteredItems = filterItems(allItems, searchQuery);
   const sortedItems = sortItems(filteredItems, sortBy, sortOrder);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = '/login';
-  };
+  const handleLogout = () => {};
 
   // Check if there are active uploads
-  const activeUploadsCount = uploads.filter(u => u.status === 'uploading' || u.status === 'pending').length;
+  const activeUploadsCount = uploads.filter(
+    (u) => u.status === "uploading" || u.status === "pending"
+  ).length;
+
+  const renderItemMenu = (item) => {
+    if (activeMenu !== item.id) return null;
+
+    const itemIsFolder = isItemFolder(item);
+    const isTrashView = currentView === "trash";
+
+    return (
+      <div
+        className="item-menu absolute top-12 right-3 z-20 min-w-[140px] rounded-xl border border-white/10 bg-[#111827] p-2 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          className="context-menu-item flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10"
+          onClick={() => {
+            setActiveMenu(null);
+            if (itemIsFolder) {
+              navigateToFolder(item.id);
+              return;
+            }
+            openFile(item.id);
+          }}
+        >
+          <ExternalLink className="w-4 h-4" />
+          Open
+        </button>
+        <button
+          className="context-menu-item flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10"
+          onClick={() => {
+            setActiveMenu(null);
+            if (isTrashView) {
+              if (itemIsFolder) {
+                restoreFolder(item.id);
+                return;
+              }
+
+              restoreFile(item.id);
+              return;
+            }
+            if (itemIsFolder) {
+              toggleStarFolder(item.id);
+              return;
+            }
+            toggleStarFile(item.id);
+          }}
+        >
+          <Star className="w-4 h-4" />
+          {isTrashView ? "Restore" : item.isStarred ? "Unstar" : "Star"}
+        </button>
+        <button
+          className="context-menu-item flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-300 hover:bg-red-500/10"
+          onClick={() => {
+            setActiveMenu(null);
+            if (itemIsFolder) {
+              setDeleteFolderDialog(item);
+              return;
+            }
+            setDeleteConfirm({ id: item.id, filename: item.filename || item.name });
+          }}
+        >
+          <Trash2 className="w-4 h-4" />
+          Delete
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#0B0F1A] text-gray-200 flex">
@@ -502,24 +739,33 @@ export default function Dashboard() {
         {/* Nav */}
         <nav className="flex-1 p-3 space-y-1">
           <button
-            onClick={navigateToRoot}
-            className={`nav-item w-full ${!currentFolderId ? 'active' : ''}`}
+            onClick={() => handleViewChange('drive')}
+            className={`nav-item w-full ${currentView === 'drive' ? "active" : ""}`}
           >
             <Home className="w-5 h-5" />
             My Drive
           </button>
 
-          <button className="nav-item w-full">
+          <button
+            onClick={() => handleViewChange('starred')}
+            className={`nav-item w-full ${currentView === 'starred' ? "active" : ""}`}
+          >
             <Star className="w-5 h-5" />
             Starred
           </button>
 
-          <button className="nav-item w-full">
+          <button
+            onClick={() => handleViewChange('recent')}
+            className={`nav-item w-full ${currentView === 'recent' ? "active" : ""}`}
+          >
             <Clock className="w-5 h-5" />
             Recent
           </button>
 
-          <button className="nav-item w-full">
+          <button
+            onClick={() => handleViewChange('trash')}
+            className={`nav-item w-full ${currentView === 'trash' ? "active" : ""}`}
+          >
             <Trash2 className="w-5 h-5" />
             Trash
           </button>
@@ -547,15 +793,19 @@ export default function Dashboard() {
         <div className="p-4 border-t border-white/5">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-brand-gradient-full flex items-center justify-center text-white font-semibold text-sm">
-              {user.username?.charAt(0).toUpperCase() || 'U'}
+              {user?.firstName?.charAt(0) || "U"}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user.username}</p>
-              <p className="text-xs text-gray-500 truncate">{user.email}</p>
+              <p className="text-sm font-medium truncate">{user?.fullName}</p>
+              <p className="text-xs text-gray-500 truncate">
+                {user?.primaryEmailAddress?.emailAddress}
+              </p>
             </div>
-            <button onClick={handleLogout} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-              <LogOut className="w-4 h-4 text-gray-400" />
-            </button>
+            <SignOutButton>
+              <button className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                <LogOut className="w-4 h-4 text-gray-400" />
+              </button>
+            </SignOutButton>
           </div>
         </div>
       </aside>
@@ -578,7 +828,10 @@ export default function Dashboard() {
                     className="flex-1 bg-transparent border-0 outline-none px-3 py-3 text-sm placeholder:text-gray-500"
                   />
                   {searchQuery && (
-                    <button onClick={() => setSearchQuery('')} className="p-1 hover:bg-white/10 rounded">
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="p-1 hover:bg-white/10 rounded"
+                    >
                       <X className="w-4 h-4 text-gray-500" />
                     </button>
                   )}
@@ -588,14 +841,22 @@ export default function Dashboard() {
               {/* View Toggle */}
               <div className="flex items-center water-toggle rounded-lg p-1">
                 <button
-                  onClick={() => setViewMode('grid')}
-                  className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white/20 text-white' : 'text-gray-500 hover:text-white'}`}
+                  onClick={() => setViewMode("grid")}
+                  className={`p-2 rounded-md transition-all ${
+                    viewMode === "grid"
+                      ? "bg-white/20 text-white"
+                      : "text-gray-500 hover:text-white"
+                  }`}
                 >
                   <Grid3X3 className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => setViewMode('list')}
-                  className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white/20 text-white' : 'text-gray-500 hover:text-white'}`}
+                  onClick={() => setViewMode("list")}
+                  className={`p-2 rounded-md transition-all ${
+                    viewMode === "list"
+                      ? "bg-white/20 text-white"
+                      : "text-gray-500 hover:text-white"
+                  }`}
                 >
                   <List className="w-4 h-4" />
                 </button>
@@ -612,25 +873,32 @@ export default function Dashboard() {
                 </button>
                 {sortDropdownOpen && (
                   <div className="absolute right-0 top-full mt-2 w-56 water-dropdown rounded-xl py-2 shadow-xl">
-                    {SORT_OPTIONS.map(option => (
+                    {SORT_OPTIONS.map((option) => (
                       <button
                         key={option.key}
                         onClick={() => {
                           if (sortBy === option.key) {
-                            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                            setSortOrder(
+                              sortOrder === "asc" ? "desc" : "asc"
+                            );
                           } else {
                             setSortBy(option.key);
-                            setSortOrder('asc');
+                            setSortOrder("asc");
                           }
                           setSortDropdownOpen(false);
                         }}
-                        className={`context-menu-item w-full ${sortBy === option.key ? 'bg-white/10' : ''}`}
+                        className={`context-menu-item w-full ${
+                          sortBy === option.key ? "bg-white/10" : ""
+                        }`}
                       >
                         <option.icon className="w-4 h-4" />
                         {option.label}
-                        {sortBy === option.key && (
-                          sortOrder === 'asc' ? <ArrowUp className="w-4 h-4 ml-auto" /> : <ArrowDown className="w-4 h-4 ml-auto" />
-                        )}
+                        {sortBy === option.key &&
+                          (sortOrder === "asc" ? (
+                            <ArrowUp className="w-4 h-4 ml-auto" />
+                          ) : (
+                            <ArrowDown className="w-4 h-4 ml-auto" />
+                          ))}
                       </button>
                     ))}
                   </div>
@@ -650,7 +918,10 @@ export default function Dashboard() {
         >
           {/* Breadcrumb */}
           <div className="flex items-center gap-2 mb-6">
-            <button onClick={navigateToRoot} className="flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors">
+            <button
+              onClick={navigateToRoot}
+              className="flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors"
+            >
               <Home className="w-4 h-4" />
             </button>
             {breadcrumbs.slice(1).map((crumb, index) => (
@@ -669,10 +940,15 @@ export default function Dashboard() {
           {/* Selection bar */}
           {selectedItems.length > 0 && (
             <div className="water-selection rounded-xl p-4 mb-6 flex items-center gap-4">
-              <button onClick={clearSelection} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+              <button
+                onClick={clearSelection}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
-              <span className="text-sm font-medium">{selectedItems.length} selected</span>
+              <span className="text-sm font-medium">
+                {selectedItems.length} selected
+              </span>
               <div className="flex-1" />
               <Button
                 variant="ghost"
@@ -687,7 +963,11 @@ export default function Dashboard() {
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  setMoveDialog({ items: selectedItems.map(id => allItems.find(i => i.id === id)).filter(Boolean) });
+                  setMoveDialog({
+                    items: selectedItems
+                      .map((id) => allItems.find((i) => i.id === id))
+                      .filter(Boolean),
+                  });
                   fetchAllFolders();
                 }}
                 className="text-gray-300 hover:text-white hover:bg-white/10 gap-2"
@@ -698,7 +978,9 @@ export default function Dashboard() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setDeleteConfirm({ bulk: true, ids: selectedItems })}
+                onClick={() =>
+                  setDeleteConfirm({ bulk: true, ids: selectedItems })
+                }
                 className="text-red-400 hover:text-red-300 hover:bg-red-500/10 gap-2"
               >
                 <Trash2 className="w-4 h-4" />
@@ -710,17 +992,33 @@ export default function Dashboard() {
           {/* Toolbar */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <Button
-                onClick={() => setNewFolderDialog(true)}
-                variant="outline"
-                className="water-button border-white/10 hover:bg-white/10 text-gray-200 gap-2"
-              >
-                <FolderPlus className="w-4 h-4" />
-                New Folder
-              </Button>
+              {currentView === 'trash' ? (
+                <Button
+                  onClick={emptyTrash}
+                  variant="outline"
+                  className="water-button border-red-500/50 hover:bg-red-500/20 text-red-400 gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Empty Trash
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    onClick={() => setNewFolderDialog(true)}
+                    variant="outline"
+                    className="water-button border-white/10 hover:bg-white/10 text-gray-200 gap-2"
+                  >
+                    <FolderPlus className="w-4 h-4" />
+                    New Folder
+                  </Button>
+                </>
+              )}
             </div>
             <div className="text-sm text-gray-500">
-              {folders.length} folders, {files.length} files
+              {currentView === 'starred' ? 'Starred items' :
+               currentView === 'recent' ? 'Recent items' :
+               currentView === 'trash' ? 'Trash' :
+               `${folders.length} folders, ${files.length} files`}
             </div>
           </div>
 
@@ -743,27 +1041,37 @@ export default function Dashboard() {
                   <Cloud className="w-4 h-4 text-white" />
                 </div>
               </div>
-              <h3 className="text-2xl font-bold gradient-text-full mb-3">Welcome to DriveX</h3>
+              <h3 className="text-2xl font-bold gradient-text-full mb-3">
+                {currentView === 'starred' ? 'No starred items' :
+                 currentView === 'recent' ? 'No recent items' :
+                 currentView === 'trash' ? 'Trash is empty' :
+                 'Welcome to DriveX'}
+              </h3>
               <p className="text-gray-500 text-center max-w-md mb-8">
-                Your personal cloud storage is ready. Upload files or create folders to get started.
+                {currentView === 'starred' ? 'Star your files and folders for quick access.' :
+                 currentView === 'recent' ? 'Files you\'ve recently interacted with will appear here.' :
+                 currentView === 'trash' ? 'Deleted files will appear here.' :
+                 'Your personal cloud storage is ready. Upload files or create folders to get started.'}
               </p>
-              <div className="flex items-center gap-4">
-                <Button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="bg-brand-gradient-full hover:opacity-90 text-white border-0 gap-2 px-6"
-                >
-                  <Upload className="w-4 h-4" />
-                  Upload Files
-                </Button>
-                <Button
-                  onClick={() => setNewFolderDialog(true)}
-                  variant="outline"
-                  className="water-button border-white/10 hover:bg-white/10 text-gray-200 gap-2 px-6"
-                >
-                  <FolderPlus className="w-4 h-4" />
-                  New Folder
-                </Button>
-              </div>
+              {currentView === 'drive' && (
+                <div className="flex items-center gap-4">
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="bg-brand-gradient-full hover:opacity-90 text-white border-0 gap-2 px-6"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Upload Files
+                  </Button>
+                  <Button
+                    onClick={() => setNewFolderDialog(true)}
+                    variant="outline"
+                    className="water-button border-white/10 hover:bg-white/10 text-gray-200 gap-2 px-6"
+                  >
+                    <FolderPlus className="w-4 h-4" />
+                    New Folder
+                  </Button>
+                </div>
+              )}
             </div>
           ) : dragActive ? (
             /* Drag Active State */
@@ -771,7 +1079,9 @@ export default function Dashboard() {
               <div className="w-20 h-20 rounded-2xl bg-brand-gradient-full flex items-center justify-center mb-4 water-glow">
                 <Upload className="w-10 h-10 text-white" />
               </div>
-              <p className="text-lg font-medium text-white">Drop files to upload</p>
+              <p className="text-lg font-medium text-white">
+                Drop files to upload
+              </p>
               {activeUploadsCount > 0 && (
                 <div className="flex items-center gap-2 text-sm text-cyan-400 mt-4">
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -779,16 +1089,19 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
-          ) : viewMode === 'grid' ? (
+          ) : viewMode === "grid" ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {sortedItems.map((item, index) => {
                 if (!item) return null;
 
                 const itemId = item.id;
                 const safeKey = itemId ?? `fallback-${index}`;
-                const isSelected = itemId ? selectedItems.includes(itemId) : false;
+                const isSelected = itemId
+                  ? selectedItems.includes(itemId)
+                  : false;
                 const isDragging = dragItem ? dragItem.id === itemId : false;
-                const isDropTarget = itemId === dropTarget && isItemFolder(item);
+                const isDropTarget =
+                  itemId === dropTarget && isItemFolder(item);
                 const itemIsFolder = isItemFolder(item);
                 const isHovered = itemId === hoveredItem;
 
@@ -798,13 +1111,37 @@ export default function Dashboard() {
                     draggable
                     onDragStart={(e) => handleItemDragStart(item, e)}
                     onDragEnd={handleItemDragEnd}
-                    onDragOver={itemIsFolder ? (e) => handleFolderDragOver(itemId, e) : undefined}
-                    onDragLeave={itemIsFolder ? (e) => handleFolderDragLeave(itemId, e) : undefined}
-                    onDrop={itemIsFolder ? (e) => handleFolderDrop(itemId, e) : undefined}
-                    onClick={() => itemIsFolder ? navigateToFolder(itemId) : openFile(itemId)}
+                    onDragOver={
+                      itemIsFolder
+                        ? (e) => handleFolderDragOver(itemId, e)
+                        : undefined
+                    }
+                    onDragLeave={
+                      itemIsFolder
+                        ? (e) => handleFolderDragLeave(itemId, e)
+                        : undefined
+                    }
+                    onDrop={
+                      itemIsFolder
+                        ? (e) => handleFolderDrop(itemId, e)
+                        : undefined
+                    }
+                    onClick={() => {
+                      if (itemIsFolder) {
+                        navigateToFolder(itemId);
+                      } else {
+                        openFile(itemId);
+                      }
+                    }}
                     onMouseEnter={() => setHoveredItem(itemId)}
                     onMouseLeave={() => setHoveredItem(null)}
-                    className={`water-card rounded-2xl p-4 cursor-pointer group relative transition-all duration-200 ${isDragging ? 'opacity-50 scale-95' : ''} ${isDropTarget ? 'ring-2 ring-cyan-400 scale-105 bg-cyan-500/10' : ''} ${isSelected ? 'water-card-selected' : ''}`}
+                    className={`water-card rounded-2xl p-4 cursor-pointer group relative transition-all duration-200 ${
+                      isDragging ? "opacity-50 scale-95" : ""
+                    } ${
+                      isDropTarget
+                        ? "ring-2 ring-cyan-400 scale-105 bg-cyan-500/10"
+                        : ""
+                    } ${isSelected ? "water-card-selected" : ""}`}
                   >
                     {/* Selection Checkbox - Only on hover */}
                     {isHovered && (
@@ -812,8 +1149,16 @@ export default function Dashboard() {
                         onClick={(e) => toggleSelect(item, e)}
                         className="absolute top-3 left-3 z-10 transition-opacity"
                       >
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center cursor-pointer transition-all ${isSelected ? 'bg-cyan-500 border-cyan-500' : 'border-gray-400 hover:border-cyan-400'}`}>
-                          {isSelected && <Check className="w-3 h-3 text-white" />}
+                        <div
+                          className={`w-5 h-5 rounded border-2 flex items-center justify-center cursor-pointer transition-all ${
+                            isSelected
+                              ? "bg-cyan-500 border-cyan-500"
+                              : "border-gray-400 hover:border-cyan-400"
+                          }`}
+                        >
+                          {isSelected && (
+                            <Check className="w-3 h-3 text-white" />
+                          )}
                         </div>
                       </div>
                     )}
@@ -822,8 +1167,13 @@ export default function Dashboard() {
                     {isHovered && !isSelected && (
                       <div className="absolute top-3 right-3 z-10 flex gap-1">
                         <button
-                          onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === itemId ? null : itemId); }}
-                          className="p-1.5 rounded-lg water-action-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMenu(
+                              activeMenu === itemId ? null : itemId
+                            );
+                          }}
+                          className="menu-toggle p-1.5 rounded-lg water-action-btn"
                         >
                           <MoreVertical className="w-4 h-4" />
                         </button>
@@ -834,392 +1184,205 @@ export default function Dashboard() {
                     {isSelected && (
                       <div className="absolute top-3 right-3 z-10 flex gap-1">
                         <button
-                          onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === itemId ? null : itemId); }}
-                          className="p-1.5 rounded-lg water-action-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMenu(
+                              activeMenu === itemId ? null : itemId
+                            );
+                          }}
+                          className="menu-toggle p-1.5 rounded-lg water-action-btn"
                         >
                           <MoreVertical className="w-4 h-4" />
                         </button>
                       </div>
                     )}
+
+                    {renderItemMenu(item)}
 
                     {/* Content */}
                     <div className="flex flex-col items-center text-center pt-4">
-                      <div className={`w-16 h-16 rounded-2xl ${getIconGradientClass(item.mimeType)} flex items-center justify-center mb-3 group-hover:scale-105 transition-transform`}>
+                      <div
+                        className={`w-16 h-16 rounded-2xl ${getIconGradientClass(
+                          item.mimeType
+                        )} flex items-center justify-center mb-3 group-hover:scale-105 transition-transform`}
+                      >
                         {itemIsFolder ? (
-                          <Folder className={`w-8 h-8 ${getIconColorClass(null)}`} />
+                          <Folder
+                            className={`w-8 h-8 ${getIconColorClass(null)}`}
+                          />
+                        ) : item.mimeType?.startsWith("image/") ? (
+                          <Image
+                            className={`w-8 h-8 ${getIconColorClass(
+                              item.mimeType
+                            )}`}
+                          />
+                        ) : item.mimeType?.startsWith("video/") ? (
+                          <Film
+                            className={`w-8 h-8 ${getIconColorClass(
+                              item.mimeType
+                            )}`}
+                          />
+                        ) : item.mimeType?.startsWith("audio/") ? (
+                          <Music
+                            className={`w-8 h-8 ${getIconColorClass(
+                              item.mimeType
+                            )}`}
+                          />
+                        ) : item.mimeType?.includes("pdf") ||
+                          item.mimeType?.includes("word") ||
+                          item.mimeType?.includes("docx") ? (
+                          <FileText
+                            className={`w-8 h-8 ${getIconColorClass(
+                              item.mimeType
+                            )}`}
+                          />
+                        ) : item.mimeType?.includes("zip") ||
+                          item.mimeType?.includes("archive") ? (
+                          <Archive
+                            className={`w-8 h-8 ${getIconColorClass(
+                              item.mimeType
+                            )}`}
+                          />
                         ) : (
-                          item.mimeType?.startsWith('image/') ? <Image className={`w-8 h-8 ${getIconColorClass(item.mimeType)}`} /> :
-                          item.mimeType?.startsWith('video/') ? <Film className={`w-8 h-8 ${getIconColorClass(item.mimeType)}`} /> :
-                          item.mimeType?.startsWith('audio/') ? <Music className={`w-8 h-8 ${getIconColorClass(item.mimeType)}`} /> :
-                          item.mimeType?.includes('pdf') || item.mimeType?.includes('word') || item.mimeType?.includes('docx') ? <FileText className={`w-8 h-8 ${getIconColorClass(item.mimeType)}`} /> :
-                          item.mimeType?.includes('zip') || item.mimeType?.includes('archive') ? <Archive className={`w-8 h-8 ${getIconColorClass(item.mimeType)}`} /> :
-                          <File className={`w-8 h-8 ${getIconColorClass(item.mimeType)}`} />
+                          <File
+                            className={`w-8 h-8 ${getIconColorClass(
+                              item.mimeType
+                            )}`}
+                          />
                         )}
                       </div>
-                      <p className="text-sm font-medium truncate w-full">{item.name || item.filename}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {itemIsFolder ? formatDate(item.createdAt) : `${formatFileSize(item.size)} • ${formatDate(item.createdAt)}`}
+                      <p className="text-sm font-medium truncate w-full">
+                        {item.name || item.filename}
                       </p>
                     </div>
-
-                    {/* Context Menu */}
-                    {activeMenu === itemId && (
-                      <div ref={menuRef} className="absolute top-12 right-3 z-30 w-48 water-dropdown rounded-xl py-2 shadow-xl">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setActiveMenu(null); }}
-                          className="context-menu-item w-full"
-                        >
-                          <Info className="w-4 h-4" /> Info
-                        </button>
-                        {!itemIsFolder && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); openFile(itemId); setActiveMenu(null); }}
-                            className="context-menu-item w-full"
-                          >
-                            <ExternalLink className="w-4 h-4" /> Open
-                          </button>
-                        )}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setMoveDialog({ items: [item] }); fetchAllFolders(); setActiveMenu(null); }}
-                          className="context-menu-item w-full"
-                        >
-                          <Move className="w-4 h-4" /> Move
-                        </button>
-                        {itemIsFolder && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setRenameDialog(item); setRenameName(item.name); setActiveMenu(null); }}
-                            className="context-menu-item w-full"
-                          >
-                            <Pencil className="w-4 h-4" /> Rename
-                          </button>
-                        )}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (itemIsFolder) {
-                              setDeleteFolderDialog(item);
-                            } else {
-                              setDeleteConfirm(item);
-                            }
-                            setActiveMenu(null);
-                          }}
-                          className="context-menu-item w-full text-red-400"
-                        >
-                          <Trash2 className="w-4 h-4" /> Delete
-                        </button>
-                      </div>
-                    )}
                   </div>
                 );
               })}
             </div>
-          ) : (
-            /* List View */
-            <div className="water-card rounded-2xl overflow-hidden">
-              {/* List Header */}
-              <div className="grid grid-cols-12 gap-4 px-6 py-3 text-xs font-medium text-gray-500 border-b border-white/5">
-                <div className="col-span-1" />
-                <div className="col-span-5 flex items-center gap-2">
-                  <button onClick={() => { setSortBy('name'); setSortOrder(sortOrder === 'asc' && sortBy === 'name' ? 'desc' : 'asc'); }} className="flex items-center gap-1 hover:text-white transition-colors">
-                    Name {sortBy === 'name' && (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
-                  </button>
-                </div>
-                <div className="col-span-2 flex items-center gap-1">
-                  <button onClick={() => { setSortBy('size'); setSortOrder(sortOrder === 'asc' && sortBy === 'size' ? 'desc' : 'asc'); }} className="flex items-center gap-1 hover:text-white transition-colors">
-                    Size {sortBy === 'size' && (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
-                  </button>
-                </div>
-                <div className="col-span-3 flex items-center gap-1">
-                  <button onClick={() => { setSortBy('date'); setSortOrder(sortOrder === 'asc' && sortBy === 'date' ? 'desc' : 'asc'); }} className="flex items-center gap-1 hover:text-white transition-colors">
-                    Modified {sortBy === 'date' && (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
-                  </button>
-                </div>
-                <div className="col-span-1" />
-              </div>
+          ) : null}
 
-              {/* List Items */}
-              {sortedItems.map((item, index) => {
-                if (!item) return null;
-
-                const itemId = item.id;
-                const safeKey = itemId ?? `fallback-list-${index}`;
-                const isSelected = itemId ? selectedItems.includes(itemId) : false;
-                const itemIsFolder = isItemFolder(item);
-                const isHovered = itemId === hoveredItem;
-                const isDropTarget = itemId === dropTarget && itemIsFolder;
-
-                return (
-                  <div
-                    key={safeKey}
-                    draggable
-                    onDragStart={(e) => handleItemDragStart(item, e)}
-                    onDragEnd={handleItemDragEnd}
-                    onDragOver={itemIsFolder ? (e) => handleFolderDragOver(itemId, e) : undefined}
-                    onDragLeave={itemIsFolder ? (e) => handleFolderDragLeave(itemId, e) : undefined}
-                    onDrop={itemIsFolder ? (e) => handleFolderDrop(itemId, e) : undefined}
-                    onClick={() => itemIsFolder ? navigateToFolder(itemId) : openFile(itemId)}
-                    onMouseEnter={() => setHoveredItem(itemId)}
-                    onMouseLeave={() => setHoveredItem(null)}
-                    className={`grid grid-cols-12 gap-4 px-6 py-3 items-center border-b border-white/5 cursor-pointer group transition-all ${isSelected ? 'water-item-selected' : 'hover:bg-white/5'} ${isDropTarget ? 'ring-2 ring-cyan-400/50 bg-cyan-500/10' : ''}`}
-                  >
-                    <div className="col-span-1">
-                      {isHovered && (
-                        <div onClick={(e) => toggleSelect(item, e)} className="cursor-pointer">
-                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-cyan-500 border-cyan-500' : 'border-gray-500 hover:border-cyan-400'}`}>
-                            {isSelected && <Check className="w-3 h-3 text-white" />}
-                          </div>
-                        </div>
-                      )}
-                      {!isHovered && isSelected && (
-                        <div className="w-5 h-5 rounded border-2 bg-cyan-500 border-cyan-500 flex items-center justify-center">
-                          <Check className="w-3 h-3 text-white" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="col-span-5 flex items-center gap-3">
-                      {itemIsFolder ? (
-                        <Folder className={`w-5 h-5 ${getIconColorClass(null)}`} />
-                      ) : (
-                        item.mimeType?.startsWith('image/') ? <Image className={`w-5 h-5 ${getIconColorClass(item.mimeType)}`} /> :
-                        item.mimeType?.startsWith('video/') ? <Film className={`w-5 h-5 ${getIconColorClass(item.mimeType)}`} /> :
-                        item.mimeType?.startsWith('audio/') ? <Music className={`w-5 h-5 ${getIconColorClass(item.mimeType)}`} /> :
-                        item.mimeType?.includes('pdf') || item.mimeType?.includes('word') || item.mimeType?.includes('docx') ? <FileText className={`w-5 h-5 ${getIconColorClass(item.mimeType)}`} /> :
-                        item.mimeType?.includes('zip') || item.mimeType?.includes('archive') ? <Archive className={`w-5 h-5 ${getIconColorClass(item.mimeType)}`} /> :
-                        <File className={`w-5 h-5 ${getIconColorClass(item.mimeType)}`} />
-                      )}
-                      <span className="text-sm truncate">{item.name || item.filename}</span>
-                    </div>
-                    <div className="col-span-2 text-xs text-gray-500">
-                      {itemIsFolder ? '—' : formatFileSize(item.size)}
-                    </div>
-                    <div className="col-span-3 text-xs text-gray-500">{formatDate(item.createdAt)}</div>
-                    <div className="col-span-1 flex justify-end">
-                      {isHovered && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === itemId ? null : itemId); }}
-                          className="p-1.5 rounded-lg water-action-btn opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Context Menu */}
-                    {activeMenu === itemId && (
-                      <div ref={menuRef} className="absolute right-6 z-30 w-48 water-dropdown rounded-xl py-2 shadow-xl">
-                        <button onClick={() => { setActiveMenu(null); }} className="context-menu-item w-full"><Info className="w-4 h-4" /> Info</button>
-                        {!itemIsFolder && <button onClick={() => { openFile(itemId); setActiveMenu(null); }} className="context-menu-item w-full"><ExternalLink className="w-4 h-4" /> Open</button>}
-                        <button onClick={() => { setMoveDialog({ items: [item] }); fetchAllFolders(); setActiveMenu(null); }} className="context-menu-item w-full"><Move className="w-4 h-4" /> Move</button>
-                        {itemIsFolder && <button onClick={() => { setRenameDialog(item); setRenameName(item.name); setActiveMenu(null); }} className="context-menu-item w-full"><Pencil className="w-4 h-4" /> Rename</button>}
-                        <button onClick={() => { if (itemIsFolder) setDeleteFolderDialog(item); else setDeleteConfirm(item); setActiveMenu(null); }} className="context-menu-item w-full text-red-400"><Trash2 className="w-4 h-4" /> Delete</button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={handleFileSelect}
+          />
         </main>
-      </div>
 
-      {/* Move Dialog */}
-      {moveDialog && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="water-dialog rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold mb-4">Move to...</h2>
-            <div className="max-h-64 overflow-y-auto space-y-1">
-              <button
-                onClick={() => moveDialog.items.forEach(item => handleMove(item, null))}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-left transition-colors"
-                disabled={movingItems}
-              >
-                <Home className="w-5 h-5 text-gray-400" />
-                <span className="text-sm">My Drive (Root)</span>
-              </button>
-              {allFolders.map(folder => (
-                <button
-                  key={folder.id}
-                  onClick={() => moveDialog.items.forEach(item => handleMove(item, folder.id))}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-left transition-colors"
-                  disabled={movingItems}
-                >
-                  <Folder className="w-5 h-5 text-neon-yellow" />
-                  <span className="text-sm">{folder.name}</span>
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-3 mt-6 justify-end">
-              <Button variant="outline" onClick={() => setMoveDialog(null)} className="water-button" disabled={movingItems}>Cancel</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* New Folder Dialog */}
-      {newFolderDialog && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="water-dialog rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold mb-4">Create New Folder</h2>
-            <input
-              type="text"
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              placeholder="Folder name"
-              className="w-full px-4 py-3 rounded-xl water-input outline-none text-sm"
-              autoFocus
-              onKeyDown={(e) => e.key === 'Enter' && createFolder()}
-            />
-            <div className="flex gap-3 mt-6 justify-end">
-              <Button variant="outline" onClick={() => setNewFolderDialog(false)} className="water-button">Cancel</Button>
-              <Button onClick={createFolder} disabled={!newFolderName.trim()} className="bg-brand-gradient-full hover:opacity-90 text-white border-0">Create</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Rename Dialog */}
-      {renameDialog && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="water-dialog rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold mb-4">Rename Folder</h2>
-            <input
-              type="text"
-              value={renameName}
-              onChange={(e) => setRenameName(e.target.value)}
-              placeholder="New name"
-              className="w-full px-4 py-3 rounded-xl water-input outline-none text-sm"
-              autoFocus
-              onKeyDown={(e) => e.key === 'Enter' && renameFolder()}
-            />
-            <div className="flex gap-3 mt-6 justify-end">
-              <Button variant="outline" onClick={() => setRenameDialog(null)} className="water-button">Cancel</Button>
-              <Button onClick={renameFolder} disabled={!renameName.trim()} className="bg-brand-gradient-full hover:opacity-90 text-white border-0">Rename</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Folder Dialog */}
-      {deleteFolderDialog && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="water-dialog rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold mb-2">Delete Folder</h2>
-            <p className="text-gray-400 text-sm mb-4">
-              Are you sure you want to delete "{deleteFolderDialog.name}"?
-            </p>
-            <label className="flex items-center gap-2 text-sm mb-6 cursor-pointer">
+        {newFolderDialog && (
+          <div
+            className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
+            onClick={() => setNewFolderDialog(false)}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-white/10 bg-[#111827] p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-semibold text-white">Create Folder</h2>
+              <p className="mt-2 text-sm text-gray-400">
+                Add a new folder to {breadcrumbs[breadcrumbs.length - 1]?.name || "My Drive"}.
+              </p>
               <input
-                type="checkbox"
-                checked={deleteFolderContents}
-                onChange={(e) => setDeleteFolderContents(e.target.checked)}
-                className="rounded border-gray-600 bg-white/5"
-              />
-              Also delete contents
-            </label>
-            <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setDeleteFolderDialog(null)} className="water-button">Cancel</Button>
-              <Button variant="destructive" onClick={deleteFolder} className="bg-red-600 hover:bg-red-700 text-white border-0">Delete</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete File Confirmation */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="water-dialog rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold mb-2">Delete File</h2>
-            <p className="text-gray-400 text-sm mb-6">
-              {deleteConfirm.bulk
-                ? `Delete ${deleteConfirm.ids.length} selected items?`
-                : `Are you sure you want to delete "${deleteConfirm.filename}"?`
-              }
-            </p>
-            <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setDeleteConfirm(null)} className="water-button">Cancel</Button>
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  if (deleteConfirm.bulk) {
-                    deleteConfirm.ids.forEach(id => {
-                      const item = allItems.find(i => i.id === id);
-                      if (item) {
-                        if (isItemFolder(item)) {
-                          foldersAPI.deleteFolder(id);
-                          setFolders(prev => prev.filter(f => f.id !== id));
-                        } else {
-                          filesAPI.deleteFile(id);
-                          setFiles(prev => prev.filter(f => f.id !== id));
-                        }
-                      }
-                    });
-                    setSelectedItems([]);
-                  } else {
-                    handleDeleteFile(deleteConfirm.id);
+                autoFocus
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    createFolder();
                   }
-                  setDeleteConfirm(null);
                 }}
-                className="bg-red-600 hover:bg-red-700 text-white border-0"
-              >
-                Delete
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* File Details */}
-      {fileDetails && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="water-dialog rounded-2xl p-6 w-full max-w-md">
-            <div className="flex items-start justify-between mb-6">
-              <div className="flex items-center gap-4">
-                <div className={`w-14 h-14 rounded-2xl ${getIconGradientClass(fileDetails.mimeType)} flex items-center justify-center`}>
-                  {fileDetails.mimeType?.startsWith('image/') ? <Image className={`w-7 h-7 ${getIconColorClass(fileDetails.mimeType)}`} /> :
-                   fileDetails.mimeType?.startsWith('video/') ? <Film className={`w-7 h-7 ${getIconColorClass(fileDetails.mimeType)}`} /> :
-                   fileDetails.mimeType?.startsWith('audio/') ? <Music className={`w-7 h-7 ${getIconColorClass(fileDetails.mimeType)}`} /> :
-                   fileDetails.mimeType?.includes('pdf') || fileDetails.mimeType?.includes('word') ? <FileText className={`w-7 h-7 ${getIconColorClass(fileDetails.mimeType)}`} /> :
-                   <File className={`w-7 h-7 ${getIconColorClass(fileDetails.mimeType)}`} />}
-                </div>
-                <div>
-                  <h2 className="font-semibold text-lg">{fileDetails.filename || fileDetails.name}</h2>
-                  <p className="text-sm text-gray-500">{fileDetails.mimeType || 'Folder'}</p>
-                </div>
-              </div>
-              <button onClick={() => setFileDetails(null)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between py-2 border-b border-white/5">
-                <span className="text-gray-500">Size</span>
-                <span>{fileDetails.size ? formatFileSize(fileDetails.size) : '—'}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-white/5">
-                <span className="text-gray-500">Created</span>
-                <span>{formatDate(fileDetails.createdAt)}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-white/5">
-                <span className="text-gray-500">Modified</span>
-                <span>{formatDate(fileDetails.updatedAt || fileDetails.createdAt)}</span>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              {!isItemFolder(fileDetails) && (
-                <Button onClick={() => openFile(fileDetails.id)} className="flex-1 bg-brand-gradient-full hover:opacity-90 text-white border-0 gap-2">
-                  <ExternalLink className="w-4 h-4" />
-                  Open
+                placeholder="Folder name"
+                className="mt-4 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-gray-500"
+              />
+              <div className="mt-5 flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setNewFolderDialog(false);
+                    setNewFolderName("");
+                  }}
+                  className="border-white/10 bg-transparent text-gray-200 hover:bg-white/10"
+                >
+                  Cancel
                 </Button>
-              )}
-              <Button variant="outline" onClick={() => setFileDetails(null)} className="water-button">
-                Close
-              </Button>
+                <Button
+                  onClick={createFolder}
+                  disabled={!newFolderName.trim()}
+                  className="bg-brand-gradient-full text-white hover:opacity-90"
+                >
+                  Create
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {deleteConfirm && (
+          <div
+            className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
+            onClick={() => setDeleteConfirm(null)}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-white/10 bg-[#111827] p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-semibold text-white">Delete File</h2>
+              <p className="mt-2 text-sm text-gray-400">
+                Delete "{deleteConfirm.filename}"?
+              </p>
+              <div className="mt-5 flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setDeleteConfirm(null)}
+                  className="border-white/10 bg-transparent text-gray-200 hover:bg-white/10"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => handleDeleteFile(deleteConfirm.id)}
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {deleteFolderDialog && (
+          <div
+            className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
+            onClick={() => setDeleteFolderDialog(null)}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-white/10 bg-[#111827] p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-semibold text-white">Delete Folder</h2>
+              <p className="mt-2 text-sm text-gray-400">
+                Delete "{deleteFolderDialog.name}"?
+              </p>
+              <div className="mt-5 flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setDeleteFolderDialog(null)}
+                  className="border-white/10 bg-transparent text-gray-200 hover:bg-white/10"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={deleteFolder}
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
