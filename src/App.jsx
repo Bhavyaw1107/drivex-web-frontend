@@ -58,7 +58,6 @@ function App() {
 
     syncToken();
   }, [getToken, isLoaded, isSignedIn]);
-
   if (!isLoaded || (isSignedIn && !authReady)) return <LoadingSpinner />;
 
   return (
@@ -86,7 +85,7 @@ function App() {
           />
 
           <Route path="/" element={<Navigate to="/login" />} />
-          <Route path="*" element={<Navigate to="/" />} />
+          {/* <Route path="*" element={<Navigate to="/" />} /> */}
         </Routes>
 
         <UploadProgress />
