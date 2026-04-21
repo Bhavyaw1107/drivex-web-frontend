@@ -86,6 +86,12 @@ export const foldersAPI = {
   emptyTrashFolders: () => api.delete('/folders/trash/empty'),
 };
 
+export const adminAPI = {
+  getStats: () => api.get('/admin/stats'),
+  getUsers: () => api.get('/admin/users'),
+  promoteUser: (clerkId) => api.post(`/admin/promote/${clerkId}`),
+};
+
 export const filesAPI = {
   getFiles: (folderId) => {
     const params = folderId ? `?folderId=${folderId}` : '';

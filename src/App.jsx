@@ -5,8 +5,9 @@ import { UploadProvider } from './context/UploadContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import Admin from './pages/Admin';
 import UploadProgress from './components/UploadProgress';
-import { SignedIn, SignedOut, RedirectToSignIn, useAuth } from "@clerk/clerk-react";
+import { useAuth } from "@clerk/clerk-react";
 import { useEffect, useState } from "react";
 import { setClerkToken, setClerkTokenGetter } from './lib/api';
 
@@ -16,6 +17,18 @@ function LoadingSpinner() {
       <div className="w-10 h-10 rounded-full bg-cyan-400 animate-pulse" />
     </div>
   );
+}
+
+function ProtectedRoute({ children }) {
+  const { isSignedIn } = useAuth();
+
+  return isSignedIn ? children : <Navigate to="/login" replace />;
+}
+
+function RootRedirect() {
+  const { isSignedIn } = useAuth();
+
+  return <Navigate to={isSignedIn ? "/dashboard" : "/login"} replace />;
 }
 
 function App() {
@@ -73,19 +86,23 @@ function App() {
           <Route
             path="/dashboard"
             element={
-              <>
-                <SignedIn>
-                  <Dashboard />
-                </SignedIn>
-                <SignedOut>
-                  <RedirectToSignIn />
-                </SignedOut>
-              </>
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
             }
           />
 
-          <Route path="/" element={<Navigate to="/login" />} />
-          {/* <Route path="*" element={<Navigate to="/" />} /> */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <Admin />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="*" element={<RootRedirect />} />
         </Routes>
 
         <UploadProgress />
