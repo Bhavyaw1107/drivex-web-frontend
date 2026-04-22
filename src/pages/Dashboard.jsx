@@ -426,6 +426,60 @@ export default function Dashboard() {
     }
   };
 
+  // Bulk delete handler for selected items (files + folders)
+  const handleBulkDelete = async () => {
+    if (!deleteConfirm?.bulk || !deleteConfirm?.ids?.length) return;
+
+    try {
+      const isTrashView = currentView === 'trash';
+
+      // Separate files and folders from selected items
+      const itemsToDelete = deleteConfirm.ids
+        .map((id) => allItems.find((item) => item.id === id))
+        .filter(Boolean);
+
+      const fileIds = itemsToDelete.filter((item) => !isItemFolder(item)).map((item) => item.id);
+      const folderIds = itemsToDelete.filter((item) => isItemFolder(item)).map((item) => item.id);
+
+      // Delete files
+      if (fileIds.length > 0) {
+        if (isTrashView) {
+          // Permanent delete from trash
+          await Promise.all(fileIds.map((id) => filesAPI.deleteFile(id)));
+        } else {
+          // Soft delete (move to trash)
+          await Promise.all(fileIds.map((id) => filesAPI.deleteFile(id)));
+        }
+      }
+
+      // Delete folders
+      if (folderIds.length > 0) {
+        if (isTrashView) {
+          // Permanent delete from trash (delete contents)
+          await Promise.all(folderIds.map((id) => foldersAPI.deleteFolderContents(id)));
+        } else {
+          // Soft delete (move to trash)
+          await Promise.all(folderIds.map((id) => foldersAPI.deleteFolder(id)));
+        }
+      }
+
+      // Update UI
+      const deletedIds = new Set([...fileIds, ...folderIds]);
+      setFiles((prev) => prev.filter((f) => !deletedIds.has(f.id)));
+      setFolders((prev) => prev.filter((f) => !deletedIds.has(f.id)));
+      setDeleteConfirm(null);
+      clearSelection();
+
+      if (isTrashView) {
+        toast.success("Items permanently deleted");
+      } else {
+        toast.success(`${itemsToDelete.length} item(s) moved to trash`);
+      }
+    } catch (err) {
+      toast.error("Failed to delete items");
+    }
+  };
+
   // Toggle star for file
   const toggleStarFile = async (fileId) => {
     try {
@@ -1328,9 +1382,13 @@ export default function Dashboard() {
               className="w-full max-w-md rounded-2xl border border-white/10 bg-[#111827] p-6 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <h2 className="text-xl font-semibold text-white">Delete File</h2>
+              <h2 className="text-xl font-semibold text-white">
+                {deleteConfirm.bulk ? "Delete Items" : "Delete File"}
+              </h2>
               <p className="mt-2 text-sm text-gray-400">
-                Delete "{deleteConfirm.filename}"?
+                {deleteConfirm.bulk
+                  ? `Delete ${deleteConfirm.ids?.length || 0} item(s)?`
+                  : `Delete "${deleteConfirm.filename}"?`}
               </p>
               <div className="mt-5 flex justify-end gap-3">
                 <Button
@@ -1342,7 +1400,7 @@ export default function Dashboard() {
                 </Button>
                 <Button
                   variant="destructive"
-                  onClick={() => handleDeleteFile(deleteConfirm.id)}
+                  onClick={deleteConfirm.bulk ? handleBulkDelete : () => handleDeleteFile(deleteConfirm.id)}
                 >
                   Delete
                 </Button>
