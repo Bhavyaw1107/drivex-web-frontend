@@ -14,12 +14,10 @@ export const setClerkTokenGetter = (getter) => {
 
 const resolveApiBaseUrl = () => {
   const configuredUrl = import.meta.env.VITE_API_URL?.trim();
-
-  if (configuredUrl) {
-    return configuredUrl.replace(/\/+$/, '');
+  if (!configuredUrl) {
+    throw new Error('VITE_API_URL is not configured');
   }
-
-  return '/api';
+  return configuredUrl.replace(/\/+$/, '');
 };
 
 const api = axios.create({
@@ -66,54 +64,54 @@ api.interceptors.response.use(
 
 export const foldersAPI = {
   createFolder: (name, parentId) =>
-    api.post('/folders', { name, parentId }),
+    api.post('/api/folders', { name, parentId }),
   getFolders: (parentId) =>
-    api.get(parentId ? `/folders?parentId=${parentId}` : '/folders'),
-  getFolder: (id) => api.get(`/folders/${id}`),
-  getBreadcrumb: (id) => api.get(`/folders/${id}/breadcrumb`),
+    api.get(parentId ? `/api/folders?parentId=${parentId}` : '/api/folders'),
+  getFolder: (id) => api.get(`/api/folders/${id}`),
+  getBreadcrumb: (id) => api.get(`/api/folders/${id}/breadcrumb`),
   renameFolder: (id, name) =>
-    api.put(`/folders/${id}`, { name }),
-  deleteFolder: (id) => api.delete(`/folders/${id}`),
-  deleteFolderContents: (id) => api.delete(`/folders/${id}/contents`),
+    api.put(`/api/folders/${id}`, { name }),
+  deleteFolder: (id) => api.delete(`/api/folders/${id}`),
+  deleteFolderContents: (id) => api.delete(`/api/folders/${id}/contents`),
   moveFolder: (id, targetFolderId) =>
-    api.put(`/folders/${id}/move`, { parentId: targetFolderId }),
-  toggleStarFolder: (id) => api.patch(`/folders/${id}/star`),
-  getStarredFolders: () => api.get('/folders/starred'),
-  getRecentFolders: () => api.get('/folders/recent'),
+    api.put(`/api/folders/${id}/move`, { parentId: targetFolderId }),
+  toggleStarFolder: (id) => api.patch(`/api/folders/${id}/star`),
+  getStarredFolders: () => api.get('/api/folders/starred'),
+  getRecentFolders: () => api.get('/api/folders/recent'),
   getTrashFolders: (parentId) =>
-    api.get(parentId ? `/folders/trash?parentId=${parentId}` : '/folders/trash'),
-  restoreFolder: (id) => api.patch(`/folders/${id}/restore`),
-  emptyTrashFolders: () => api.delete('/folders/trash/empty'),
+    api.get(parentId ? `/api/folders/trash?parentId=${parentId}` : '/api/folders/trash'),
+  restoreFolder: (id) => api.patch(`/api/folders/${id}/restore`),
+  emptyTrashFolders: () => api.delete('/api/folders/trash/empty'),
 };
 
 export const adminAPI = {
-  getStats: () => api.get('/admin/stats'),
-  getUsers: () => api.get('/admin/users'),
-  promoteUser: (clerkId) => api.post(`/admin/promote/${clerkId}`),
+  getStats: () => api.get('/api/admin/stats'),
+  getUsers: () => api.get('/api/admin/users'),
+  promoteUser: (clerkId) => api.post(`/api/admin/promote/${clerkId}`),
 };
 
 export const filesAPI = {
   getFiles: (folderId) => {
     const params = folderId ? `?folderId=${folderId}` : '';
-    return api.get(`/files${params}`);
+    return api.get(`/api/files${params}`);
   },
   uploadFile: (formData, onUploadProgress) =>
-    api.post('/files/upload', formData, {
+    api.post('/api/files/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress,
     }),
-  deleteFile: (id) => api.delete(`/files/${id}`),
-  getFile: (id) => api.get(`/files/${id}`),
-  getFileUrl: (id) => api.get(`/files/${id}/url`),
+  deleteFile: (id) => api.delete(`/api/files/${id}`),
+  getFile: (id) => api.get(`/api/files/${id}`),
+  getFileUrl: (id) => api.get(`/api/files/${id}/url`),
   moveFile: (id, targetFolderId) =>
-    api.put(`/files/${id}/move`, { folderId: targetFolderId }),
-  toggleStarFile: (id) => api.patch(`/files/${id}/star`),
-  getStarredFiles: () => api.get('/files/starred'),
-  getRecentFiles: () => api.get('/files/recent'),
+    api.put(`/api/files/${id}/move`, { folderId: targetFolderId }),
+  toggleStarFile: (id) => api.patch(`/api/files/${id}/star`),
+  getStarredFiles: () => api.get('/api/files/starred'),
+  getRecentFiles: () => api.get('/api/files/recent'),
   getTrashFiles: (folderId) =>
-    api.get(folderId ? `/files/trash?folderId=${folderId}` : '/files/trash'),
-  restoreFile: (id) => api.patch(`/files/${id}/restore`),
-  emptyTrashFiles: () => api.delete('/files/trash/empty'),
+    api.get(folderId ? `/api/files/trash?folderId=${folderId}` : '/api/files/trash'),
+  restoreFile: (id) => api.patch(`/api/files/${id}/restore`),
+  emptyTrashFiles: () => api.delete('/api/files/trash/empty'),
 };
 
 export default api;
